@@ -1,7 +1,7 @@
 import pool from "../config/database.js";
 import { fileURLToPath } from "url";
 
-async function setupDatabase() {
+export async function setupDatabase() {
   const client = await pool.connect();
 
   try {
@@ -124,7 +124,6 @@ async function setupDatabase() {
   }
 }
 
-export default { setupDatabase };
 
 // ----------------------
 // RUN IF EXECUTED DIRECTLY 
