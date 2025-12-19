@@ -1,0 +1,35 @@
+{
+  "name": "iot-backend",
+  "version": "1.0.0",
+  "description": "IoT Monitoring System Backend API",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "keywords": [
+    "iot",
+    "mqtt",
+    "influxdb",
+    "postgresql"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@influxdata/influxdb-client": "^1.33.2",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "mqtt": "^5.3.0",
+    "nodemailer": "^7.0.7",
+    "pg": "^8.11.3",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "nodemon": "^3.0.2"
+  }
+}
