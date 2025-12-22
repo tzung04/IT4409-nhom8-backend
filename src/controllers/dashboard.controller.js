@@ -1,4 +1,5 @@
 import Device from '../models/device.model.js';
+import { generateDashboardHash } from '../utils/hash.utils.js';
 
 export const handlerGetDashboardUrl = async (req, res) => {
   try {
@@ -15,25 +16,34 @@ export const handlerGetDashboardUrl = async (req, res) => {
       });
     }
     
-    // Lấy device serials để pass vào Grafana variables
+    // Lấy device SERIALS để tạo hash
     const deviceSerials = devices.map(d => d.device_serial).join(',');
     
-    // Generate Grafana embed URL
-    const grafanaUrl = process.env.GRAFANA_URL || 'http://localhost:3001';
-    const dashboardUid = process.env.GRAFANA_DASHBOARD_UID || 'iot-dashboard';
+    // Generate signed hash 
+    const { hash, exp } = generateDashboardHash(userId, deviceSerials);
     
-    // Build URL với parameters
-    const params = new URLSearchParams({
-      orgId: '1',
-      'var-user_id': userId,
-      'var-devices': deviceSerials, // Cần khớp với tên biến trong Grafana Dashboard
-      theme: 'light',
-      kiosk: 'tv', // Hide Grafana UI (sidebar, header)
-      from: 'now-24h',
-      to: 'now',
-      refresh: '5s'
+    // Build URL params
+    const dashboardUid = process.env.GRAFANA_DASHBOARD_UID;
+    const grafanaUrl = process.env.GRAFANA_URL;
+    
+    const params = new URLSearchParams();
+    params.append('orgId', '1');
+    params.append('var-user_id', userId);
+    
+    // Append từng device name riêng lẻ
+    devices.forEach(device => {
+      params.append('var-devices', device.name);
     });
     
+    params.append('theme', 'light');
+    params.append('kiosk', 'tv');
+    params.append('from', 'now-24h');
+    params.append('to', 'now');
+    params.append('refresh', '5s');
+    params.append('hash', hash);  // Hash từ serials
+    params.append('exp', exp);
+    
+    // Trả về URL để đi qua backend proxy
     const embedUrl = `${grafanaUrl}/d/${dashboardUid}/iot-monitoring?${params.toString()}`;
     
     return res.json({
@@ -45,6 +55,7 @@ export const handlerGetDashboardUrl = async (req, res) => {
         is_active: d.is_active
       }))
     });
+    
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Internal server error' });
@@ -58,25 +69,30 @@ export const handlerGetPanelUrl = async (req, res) => {
     
     // Verify device belongs to user
     const device = await Device.findById(deviceId);
-    
     if (!device || device.user_id !== userId) {
       return res.status(403).json({ message: 'Access denied' });
     }
     
-    const grafanaUrl = process.env.GRAFANA_URL || 'http://localhost:3001';
-    const dashboardUid = process.env.GRAFANA_DASHBOARD_UID || 'iot-dashboard';
+    // Generate hash cho single device
+    const { hash, exp } = generateDashboardHash(userId, device.device_serial);
     
-    // d-solo for single panel embed
+    const dashboardUid = process.env.GRAFANA_DASHBOARD_UID;
+    const backendUrl = process.env.BACKEND_URL || '';
+    
     const params = new URLSearchParams({
       orgId: '1',
-      'var-device': device.device_serial,
+      'var-user_id': userId,
+      'var-device': device.name,  
       theme: 'light',
-      panelId: panelId || '2', // Panel ID trong Grafana
+      panelId: panelId || '2',
       from: `now-${timeRange || '24h'}`,
-      to: 'now'
+      to: 'now',
+      hash: hash,  // Hash từ serial
+      exp: exp
     });
     
-    const embedUrl = `${grafanaUrl}/d-solo/${dashboardUid}/iot-monitoring?${params.toString()}`;
+    // URL cho single panel
+    const embedUrl = `${backendUrl}/grafana/d-solo/${dashboardUid}/iot-monitoring?${params.toString()}`;
     
     return res.json({
       embedUrl: embedUrl,
@@ -86,6 +102,7 @@ export const handlerGetPanelUrl = async (req, res) => {
         serial: device.device_serial
       }
     });
+    
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Internal server error' });

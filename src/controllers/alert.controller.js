@@ -19,7 +19,7 @@ const getDeviceIdByRuleId = async (ruleId) => {
 
 // Thêm cảnh báo mới
 export const createRule = async (req, res) => {
-    const { device_id, metric_type, condition, threshold, email_to, is_enabled } = req.body;
+    const { device_id, metric_type, condition, threshold, email_to, severity, is_enabled } = req.body;
     const userId = req.user.id;
 
     try {
@@ -35,7 +35,8 @@ export const createRule = async (req, res) => {
             metric_type, 
             condition, 
             threshold, 
-            email_to, 
+            email_to,
+            severity, 
             is_enabled
         });
 
@@ -71,7 +72,7 @@ export const getRulesByDevice = async (req, res) => {
 // Cập nhật cảnh báo
 export const updateRule = async (req, res) => {
     const { ruleId } = req.params;
-    const { metric_type, condition, threshold, email_to, is_enabled } = req.body;
+    const { metric_type, condition, threshold, email_to, severity, is_enabled } = req.body;
     const userId = req.user.id;
 
     try {
@@ -92,7 +93,8 @@ export const updateRule = async (req, res) => {
             metric_type, 
             condition, 
             threshold, 
-            email_to, 
+            email_to,
+            severity, 
             is_enabled
         });
 
@@ -128,5 +130,17 @@ export const deleteRule = async (req, res) => {
     } catch (err) {
         console.error('Error deleting rule:', err);
         res.status(500).json({ error: 'Lỗi máy chủ khi xóa quy tắc cảnh báo.' });
+    }
+};
+
+//  Lấy tất cả cảnh báo theo User ID
+export const getAllRulesByUser = async (req, res) => {
+    const userId = req.user.id;
+    try {
+        const rules = await AlertRule.findByUserId(userId);
+        res.json(rules);
+    } catch (err) {
+        console.error('Error getting user rules:', err);
+        res.status(500).json({ error: 'Lỗi máy chủ khi lấy danh sách quy tắc.' });
     }
 };

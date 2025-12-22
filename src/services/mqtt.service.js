@@ -1,8 +1,8 @@
 import { getMQTTClient } from '../config/mqtt.js';
 import Device from '../models/device.model.js';
 import { writeSensorData } from '../config/influxdb.js';
-import AlertRule from '../models/alertRule.model.js'; // Model AlertRule
-import AlertLog from '../models/alertLog.model.js';   // Model AlertLog
+import AlertRule from '../models/alertRule.model.js'; 
+import AlertLog from '../models/alertLog.model.js'; 
 import emailService from '../services/email.service.js'
 
 const TOPIC_PROVISION_REQ = 'system/provisioning/req';
@@ -32,8 +32,8 @@ class MQTTService {
             'less_than': '<',
             'equal': '=',
             'not_equal': '!=',
-            'greater_than_or_equal': '>=',
-            'less_than_or_equal': '<=',
+            "greater_than_or_equal": "≥",
+            "less_than_or_equal": "≤"
         };
       
       const rules = await AlertRule.findEnabledByDeviceId(device.id);
@@ -61,11 +61,12 @@ class MQTTService {
           }
 
           // 3. Tạo Log
-          const message = `[CẢNH BÁO ${rule.metric_type.toUpperCase()}] ${device.name}: ${sensorValue} ${rule.condition} ${rule.threshold}`;
+          const message = `[CẢNH BÁO ${rule.metric_type.toUpperCase()}] ${device.name}: ${sensorValue} ${conditionSymbol} ${rule.threshold}`;
           
           await AlertLog.create({
             device_id: device.id,
             rule_id: rule.id,
+            rule_severity: rule.severity,
             value_at_time: sensorValue,
             message: message,
           });
@@ -238,7 +239,7 @@ class MQTTService {
     }
 
     // Lưu InfluxDB
-    const saved = await writeSensorData(device.device_serial, device.user_id, payload);
+    const saved = await writeSensorData(device.name, device.user_id, payload);
     if (!saved) console.error(`[INFLUX] Failed to save data for ${device.name}`);
 
     // Kiểm tra cảnh báo

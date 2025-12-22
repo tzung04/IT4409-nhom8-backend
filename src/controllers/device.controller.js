@@ -1,6 +1,7 @@
 import Device from '../models/device.model.js'; 
 import crypto from 'crypto';
 
+
 // Helper function: Logic kiểm tra quyền sở hữu thiết bị
 // Vì Model findById chỉ lấy theo ID, ta cần check thêm user_id ở controller
 const validateOwnership = async (deviceId, userId) => {
@@ -14,7 +15,7 @@ const validateOwnership = async (deviceId, userId) => {
 
 // Tạo thiết bị mới
 export const createDevice = async (req, res) => {
-
+    // Thêm place_id vào body nếu frontend có gửi lên
     const { name, mac_address, place_id } = req.body;
 
     if (!req.user || !req.user.id) {
@@ -28,7 +29,7 @@ export const createDevice = async (req, res) => {
             return res.status(400).json({ message: "Tên và địa chỉ MAC là bắt buộc." });
     }
 
-    // Tự động tạo device_serial duy nhất 
+    // Tự động tạo device_serial duy nhất (Thay thế logic device_key cũ)
     const device_serial = crypto.randomBytes(8).toString('hex').toUpperCase();
     const topic = `/devices/${mac_address}/${device_serial}/data`;
 
@@ -51,6 +52,7 @@ export const createDevice = async (req, res) => {
              return res.status(409).json({ error: 'Serial thiết bị bị trùng, vui lòng thử lại.' });
         }
         
+        // Lỗi khóa ngoại (Foreign key) nếu place_id không tồn tại
         if (err.name === 'SequelizeForeignKeyConstraintError') {
              return res.status(400).json({ error: 'Khu vực (Place) không hợp lệ.' });
         }
@@ -65,7 +67,48 @@ export const getAllUserDevices = async (req, res) => {
 
     try {
         const devices = await Device.findByUserId(userId);
-        res.json(devices);
+        
+        // Import querySensorData để tính status
+        const { querySensorData } = await import('../config/influxdb.js');
+        
+        // Tính status cho từng device
+        const devicesWithStatus = await Promise.all(
+            devices.map(async (device) => {
+                try {
+                    // Query latest data (1 hour)
+                    const data = await querySensorData(device.name, userId, 1);
+                    const latest = data.length > 0 ? data[data.length - 1] : null;
+                    
+                    // Xác định status
+                    let status = 'inactive';
+                    if (device.is_active) {
+                        if (!latest) {
+                            status = 'offline';
+                        } else {
+                            const lastDataTime = new Date(latest.time);
+                            const now = new Date();
+                            const diffMinutes = (now - lastDataTime) / 1000 / 60;
+                            status = diffMinutes > 2 ? 'offline' : 'online';
+                        }
+                    }
+                    
+                    return {
+                        ...device,
+                        status,
+                        lastSeen: latest ? latest.time : null
+                    };
+                } catch (err) {
+                    console.error(`Error getting status for device ${device.id}:`, err);
+                    return {
+                        ...device,
+                        status: 'error',
+                        lastSeen: null
+                    };
+                }
+            })
+        );
+        
+        res.json(devicesWithStatus);
     } catch (err) {
         console.error('Error getting user devices:', err);
         res.status(500).json({ error: 'Lỗi máy chủ khi lấy danh sách thiết bị.' });
@@ -104,7 +147,7 @@ export const updateDevice = async (req, res) => {
     try {
         // 1. Kiểm tra quyền sở hữu trước khi update
         const checkDevice = await validateOwnership(deviceId, userId);
-        if (!checkDevice) { 
+        if (!checkDevice) { // Xử lý cả null và false chung status 404/403 tùy ý, ở đây chặn chặt
              return res.status(404).json({ message: 'Thiết bị không tồn tại hoặc bạn không có quyền.' });
         }
 

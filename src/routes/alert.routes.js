@@ -1,11 +1,14 @@
 import express from 'express';
-import {createRule, getRulesByDevice, updateRule, deleteRule} from '../controllers/alert.controller.js';
+import {createRule, getRulesByDevice, updateRule, deleteRule, getAllRulesByUser} from '../controllers/alert.controller.js';
 import authMiddleware from '../middleware/auth.middleware.js'; 
 
 const router = express.Router();
 
 // Áp dụng middleware xác thực
 router.use(authMiddleware); 
+
+// Lấy tất cả cảnh báo theo User ID
+router.get('/all', getAllRulesByUser);
 
 // Thêm cảnh báo mới
 router.post('/', createRule);
@@ -18,5 +21,6 @@ router.put('/:ruleId', updateRule);
 
 // Xóa cảnh báo
 router.delete('/:ruleId', deleteRule);
+
 
 export default router;

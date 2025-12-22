@@ -27,12 +27,21 @@ export async function setupDatabase() {
       END $$;
     `);
 
+    // Create severity_level enum
+    await client.query(`
+      DO $$ BEGIN
+        CREATE TYPE severity_level AS ENUM ('low', 'medium', 'high');
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `);
+
     console.log("Creating tables...");
 
-    // Users table
+    // Users table 
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         username VARCHAR(50) UNIQUE NOT NULL,
         email VARCHAR(100) UNIQUE NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
@@ -42,11 +51,11 @@ export async function setupDatabase() {
       );
     `);
 
-    // Places table
+    // Places table 
     await client.query(`
       CREATE TABLE IF NOT EXISTS places (
         id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         name VARCHAR(100) NOT NULL,
         description TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -57,7 +66,7 @@ export async function setupDatabase() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS devices (
         id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         place_id INTEGER REFERENCES places(id) ON DELETE SET NULL,
         mac_address VARCHAR(100) UNIQUE NOT NULL,
         device_serial VARCHAR(100) UNIQUE NOT NULL,
@@ -68,7 +77,7 @@ export async function setupDatabase() {
       );
     `);
 
-    // Alert rules table
+    // Alert rules table 
     await client.query(`
       CREATE TABLE IF NOT EXISTS alert_rules (
         id SERIAL PRIMARY KEY,
@@ -77,17 +86,19 @@ export async function setupDatabase() {
         condition alert_condition NOT NULL,
         threshold FLOAT NOT NULL,
         email_to VARCHAR(255) NOT NULL,
+        severity severity_level DEFAULT 'medium', 
         is_enabled BOOLEAN DEFAULT true,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
-    // Alert logs table
+    // Alert logs table 
     await client.query(`
       CREATE TABLE IF NOT EXISTS alert_logs (
         id SERIAL PRIMARY KEY,
         device_id INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
         rule_id INTEGER NOT NULL REFERENCES alert_rules(id) ON DELETE CASCADE,
+        rule_severity severity_level DEFAULT 'medium',
         value_at_time FLOAT NOT NULL,
         message TEXT NOT NULL,
         triggered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -124,6 +135,7 @@ export async function setupDatabase() {
   }
 }
 
+export default { setupDatabase };
 
 // ----------------------
 // RUN IF EXECUTED DIRECTLY 

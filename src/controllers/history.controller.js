@@ -13,20 +13,19 @@ export const getSensorDataHistory = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        // 1. Bảo mật: Xác thực quyền sở hữu thiết bị
+        // Bảo mật: Xác thực quyền sở hữu thiết bị
         // Lấy device theo key và kiểm tra user_id
         const device = await Device.findByTopic(deviceKey);
         if (!device || device.user_id.toString() !== userId.toString()) {
             return res.status(403).json({ message: 'Thiết bị không tồn tại hoặc bạn không có quyền truy cập.' });
         }
 
-        // Chuyển timeRange thành số giờ (vì hàm querySensorData mới nhận hours)
         let hours = 24;
         if (timeRange.endsWith('h')) {
             hours = parseInt(timeRange.slice(1, -1));
         }
 
-        const results = await querySensorData(device.device_serial, hours);
+        const results = await querySensorData(device.device_serial, userId, hours);
 
         res.json(results);
     } catch (error) {
@@ -35,12 +34,33 @@ export const getSensorDataHistory = async (req, res) => {
     }
 };
 
-// Lấy lịch sử cảnh báo từ PostgreSQL
-export const getAlertsHistory = async (req, res) => {
-
+export const getAlertsHistoryByUser = async (req, res) => {
     try {
         const userId = req.user.id;
-        const alerts = await AlertLog.findByUserId(userId, 100);
+        
+        const alerts = await AlertLog.findByUserId(userId);
+        res.json(alerts);
+    } catch (err) {
+        console.error('PostgreSQL Alerts Query Error:', err);
+        res.status(500).json({ error: 'Lỗi truy vấn lịch sử cảnh báo.' });
+    }
+};
+
+// Lấy lịch sử cảnh báo có lọc từ PostgreSQL
+export const getAlertsHistoryByDevice = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        
+        // 1. Lấy tham số từ query string (?device_id=...&from=...&to=...)
+        const { device_id, from, to } = req.query;
+
+        // 2. Gọi hàm model mới với object chứa các bộ lọc
+        const alerts = await AlertLog.findByFilter(userId, { 
+            deviceId: device_id, 
+            fromDate: from, 
+            toDate: to, 
+            limit: 100 
+        });
 
         res.json(alerts);
     } catch (err) {
