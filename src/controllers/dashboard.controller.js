@@ -33,7 +33,7 @@ export const handlerGetDashboardUrl = async (req, res) => {
     params.append('refresh', '5s');
     
     // Trả về URL để đi qua backend proxy
-    const embedUrl = `${grafanaUrl}/d/${dashboardUid}/iot-dashboard?${params.toString()}&kiosk&theme=light`;
+    const embedUrl = `${grafanaUrl}/d/${dashboardUid}/iot-dashboard-temperature-and-humidity?${params.toString()}&kiosk&theme=light`;
     
     return res.json({
       embedUrl: embedUrl,
