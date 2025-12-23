@@ -1,5 +1,4 @@
 import Device from '../models/device.model.js';
-import { generateDashboardHash } from '../utils/hash.utils.js';
 
 export const handlerGetDashboardUrl = async (req, res) => {
   try {
@@ -16,15 +15,9 @@ export const handlerGetDashboardUrl = async (req, res) => {
       });
     }
     
-    // Lấy device SERIALS để tạo hash
-    const deviceSerials = devices.map(d => d.device_serial).join(',');
-    
-    // Generate signed hash 
-    const { hash, exp } = generateDashboardHash(userId, deviceSerials);
-    
     // Build URL params
-    const dashboardUid = process.env.GRAFANA_DASHBOARD_UID;
     const grafanaUrl = process.env.GRAFANA_URL;
+    const dashboardUid = process.env.GRAFANA_DASHBOARD_UID;
     
     const params = new URLSearchParams();
     params.append('orgId', '1');
@@ -35,16 +28,12 @@ export const handlerGetDashboardUrl = async (req, res) => {
       params.append('var-devices', device.name);
     });
     
-    params.append('theme', 'light');
-    params.append('kiosk', 'tv');
     params.append('from', 'now-24h');
     params.append('to', 'now');
     params.append('refresh', '5s');
-    params.append('hash', hash);  // Hash từ serials
-    params.append('exp', exp);
     
     // Trả về URL để đi qua backend proxy
-    const embedUrl = `${grafanaUrl}/d/${dashboardUid}/iot-monitoring?${params.toString()}`;
+    const embedUrl = `${grafanaUrl}/d/${dashboardUid}/iot-dashboard?${params.toString()}&kiosk&theme=light`;
     
     return res.json({
       embedUrl: embedUrl,
@@ -73,11 +62,8 @@ export const handlerGetPanelUrl = async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
     
-    // Generate hash cho single device
-    const { hash, exp } = generateDashboardHash(userId, device.device_serial);
-    
+    const grafanaUrl = process.env.GRAFANA_URL;
     const dashboardUid = process.env.GRAFANA_DASHBOARD_UID;
-    const backendUrl = process.env.BACKEND_URL || '';
     
     const params = new URLSearchParams({
       orgId: '1',
@@ -87,12 +73,10 @@ export const handlerGetPanelUrl = async (req, res) => {
       panelId: panelId || '2',
       from: `now-${timeRange || '24h'}`,
       to: 'now',
-      hash: hash,  // Hash từ serial
-      exp: exp
     });
     
     // URL cho single panel
-    const embedUrl = `${backendUrl}/grafana/d-solo/${dashboardUid}/iot-monitoring?${params.toString()}`;
+    const embedUrl = `${grafanaUrl}/d-solo/${dashboardUid}/iot-monitoring?${params.toString()}`;
     
     return res.json({
       embedUrl: embedUrl,

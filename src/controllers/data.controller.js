@@ -96,8 +96,8 @@ export const handlerGetLatestData = async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    // Query last 1 hour 
-    const data = await querySensorDataRaw(device.name, userId, 1, 100);
+    // Query last 24 hour 
+    const data = await querySensorDataRaw(device.name, userId, 24, 100);
     const latest = data.length > 0 ? data[data.length - 1] : null;
 
     const status = determineDeviceStatus(device, latest);
