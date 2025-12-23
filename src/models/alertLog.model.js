@@ -32,16 +32,50 @@ class AlertLog {
     return result.rows;
   }
 
-  static async findRecentByDeviceAndRule(device_id, rule_id, minutes = 5) {
-    const result = await pool.query(
-      `SELECT * FROM alert_logs 
-       WHERE device_id = $1 AND rule_id = $2 
-       AND triggered_at > NOW() - INTERVAL '${minutes} minutes'
-       ORDER BY triggered_at DESC LIMIT 1`,
-      [device_id, rule_id]
-    );
-    return result.rows[0];
-  }
+  static async findRecentByDeviceAndRule(deviceId, ruleId, minutesAgo = 5) {
+    const query = `
+        SELECT 
+            *,
+            NOW() as db_now,
+            NOW() AT TIME ZONE 'UTC' as db_now_utc,
+            triggered_at AT TIME ZONE 'UTC' as triggered_at_utc,
+            EXTRACT(EPOCH FROM (NOW() - triggered_at)) / 60 as minutes_since_trigger,
+            current_setting('TIMEZONE') as db_timezone
+        FROM alert_logs 
+        WHERE device_id = $1 
+          AND rule_id = $2
+          AND triggered_at > NOW() - INTERVAL '${minutesAgo} minutes'
+        ORDER BY triggered_at DESC 
+        LIMIT 1
+    `;
+    
+    try {
+        console.log(`[DB QUERY] findRecentByDeviceAndRule(device=${deviceId}, rule=${ruleId}, minutes=${minutesAgo})`);
+        
+        const result = await db.query(query, [deviceId, ruleId]);
+        const alert = result.rows[0];
+        
+        if (alert) {
+            console.log(`[DB RESULT] Found recent alert:`);
+            console.log(`[DB RESULT]   Alert ID: ${alert.id}`);
+            console.log(`[DB RESULT]   DB NOW (raw): ${alert.db_now}`);
+            console.log(`[DB RESULT]   DB NOW (UTC): ${alert.db_now_utc}`);
+            console.log(`[DB RESULT]   DB Timezone: ${alert.db_timezone}`);
+            console.log(`[DB RESULT]   Triggered at (raw): ${alert.triggered_at}`);
+            console.log(`[DB RESULT]   Triggered at (UTC): ${alert.triggered_at_utc}`);
+            console.log(`[DB RESULT]   Minutes since trigger (DB calc): ${alert.minutes_since_trigger.toFixed(2)}`);
+        } else {
+            console.log(`[DB RESULT] No recent alert found within ${minutesAgo} minutes`);
+        }
+        
+        return alert || null;
+    } catch (err) {
+        console.error('[DB ERROR] findRecentByDeviceAndRule:', err);
+        console.error('[DB ERROR] Query:', query);
+        console.error('[DB ERROR] Params:', [deviceId, ruleId]);
+        return null;
+    }
+}
 
   static async findByFilter(user_id, { deviceId, fromDate, toDate, limit = 50 } = {}) {
     let query = `

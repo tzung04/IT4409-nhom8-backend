@@ -12,7 +12,6 @@ class MQTTService {
     this.subscribedTopics = new Set();
   }
 
-
   checkCondition(value, condition, threshold) {
     switch (condition) {
       case 'greater_than': return value > threshold;
@@ -28,15 +27,26 @@ class MQTTService {
   async checkAlertRules(device, payload) {
     try {
       const conditionMap = {
-            'greater_than': '>',
-            'less_than': '<',
-            'equal': '=',
-            'not_equal': '!=',
-            "greater_than_or_equal": "≥",
-            "less_than_or_equal": "≤"
-        };
+        'greater_than': '>',
+        'less_than': '<',
+        'equal': '=',
+        'not_equal': '!=',
+        'greater_than_or_equal': '≥',
+        'less_than_or_equal': '≤'
+      };
+      
+      console.log(`\n[ALERT CHECK] Starting for device: ${device.name} (ID: ${device.id})`);
+      console.log(`[ALERT CHECK] Server time (Node.js): ${new Date().toISOString()}`);
+      console.log(`[ALERT CHECK] Server timestamp: ${Date.now()}`);
       
       const rules = await AlertRule.findEnabledByDeviceId(device.id);
+      
+      if (!rules || rules.length === 0) {
+        console.log(`[ALERT CHECK] No rules found for device ${device.id}`);
+        return;
+      }
+      
+      console.log(`[ALERT CHECK] Found ${rules.length} rule(s) to check`);
 
       for (const rule of rules) {
         let sensorValue;
@@ -47,21 +57,52 @@ class MQTTService {
         if (metricName === 'temperature') sensorValue = payload.temperature;
         else if (metricName === 'humidity') sensorValue = payload.humidity;
 
-        if (sensorValue === undefined || sensorValue === null) continue;
+        if (sensorValue === undefined || sensorValue === null) {
+          console.log(`[ALERT CHECK] No ${metricName} data in payload, skipping rule ${rule.id}`);
+          continue;
+        }
+
+        console.log(`\n[RULE ${rule.id}] Checking: ${metricName} ${conditionSymbol} ${rule.threshold}`);
+        console.log(`[RULE ${rule.id}] Current value: ${sensorValue}`);
 
         // 1. Kiểm tra ngưỡng
         const isViolated = this.checkCondition(sensorValue, rule.condition, rule.threshold);
+        console.log(`[RULE ${rule.id}] Violated: ${isViolated}`);
 
         if (isViolated) {
           // 2. Debounce (5 phút)
+          console.log(`[RULE ${rule.id}] Checking for recent alerts...`);
+          
           const recentAlert = await AlertLog.findRecentByDeviceAndRule(device.id, rule.id, 5);
+          
           if (recentAlert) {
-            console.log(`[DEBOUNCE] Alert for ${device.name} skipped.`);
+            console.log(`[DEBOUNCE] Recent alert found!`);
+            console.log(`[DEBOUNCE]   Alert ID: ${recentAlert.id}`);
+            console.log(`[DEBOUNCE]   Triggered at (from DB): ${recentAlert.triggered_at}`);
+            console.log(`[DEBOUNCE]   Triggered at (ISO): ${new Date(recentAlert.triggered_at).toISOString()}`);
+            console.log(`[DEBOUNCE]   Triggered timestamp: ${new Date(recentAlert.triggered_at).getTime()}`);
+            
+            // Tính thủ công để debug
+            const now = Date.now();
+            const alertTime = new Date(recentAlert.triggered_at).getTime();
+            const diffMs = now - alertTime;
+            const diffMinutes = diffMs / 1000 / 60;
+            
+            console.log(`[DEBOUNCE]   Current time: ${now}`);
+            console.log(`[DEBOUNCE]   Alert time: ${alertTime}`);
+            console.log(`[DEBOUNCE]   Difference (ms): ${diffMs}`);
+            console.log(`[DEBOUNCE]   Difference (minutes): ${diffMinutes.toFixed(2)}`);
+            console.log(`[DEBOUNCE] ⏭️  Alert skipped (within 5 min window)`);
             continue;
+          } else {
+            console.log(`[DEBOUNCE] No recent alert found, proceeding...`);
           }
 
           // 3. Tạo Log
           const message = `[CẢNH BÁO ${rule.metric_type.toUpperCase()}] ${device.name}: ${sensorValue} ${conditionSymbol} ${rule.threshold}`;
+          
+          console.log(`[ALERT CREATE] Creating new alert log...`);
+          console.log(`[ALERT CREATE] Message: ${message}`);
           
           await AlertLog.create({
             device_id: device.id,
@@ -71,30 +112,41 @@ class MQTTService {
             message: message,
           });
 
-          console.log(`\nALERT TRIGGERED: ${message}`);
+          console.log(`\n🚨 ALERT TRIGGERED: ${message}`);
+          console.log(`🚨 Time: ${new Date().toISOString()}\n`);
 
           const ruleDisplay = `
           ${rule.metric_type} ${conditionSymbol} ${rule.threshold}
           (Giá trị vượt ngưỡng: ${sensorValue})
           `;
+          
           // 4. Gửi Email
           try {
+            console.log(`[EMAIL] Sending alert to: ${rule.email_to}`);
             const emailSent = await emailService.sendAlertEmail(rule.email_to, device.name, ruleDisplay);
-            if (!emailSent) console.warn(`[MAIL FAIL] Could not send alert email to ${rule.email_to}`);
+            
+            if (emailSent) {
+              console.log(`[EMAIL] ✓ Successfully sent to ${rule.email_to}`);
+            } else {
+              console.warn(`[EMAIL] ✗ Failed to send to ${rule.email_to}`);
+            }
           } catch (mailErr) {
-            console.error(`[MAIL ERROR] ${mailErr.message}`);
+            console.error(`[EMAIL ERROR] ${mailErr.message}`);
+            console.error(mailErr.stack);
           }
         }
       }
+      
+      console.log(`[ALERT CHECK] Completed for device: ${device.name}\n`);
     } catch (err) {
       console.error("[ALERT ERROR] Check rules failed:", err);
+      console.error(err.stack);
     }
   }
 
   // Subscribe tất cả devices đang active
   async subscribeAllDevices() {
     try {
-
       this.subscribeTopic(TOPIC_PROVISION_REQ);
 
       const devices = await Device.findActiveDevices();
@@ -192,11 +244,11 @@ class MQTTService {
       if (device) {
         
         if (!device.is_active) {
-            console.log(`[PROVISION] Activating new device: ${device.name}...`);
-            
-            await Device.update(device.id, { is_active: true });
-            
-            device.is_active = true; 
+          console.log(`[PROVISION] Activating new device: ${device.name}...`);
+          
+          await Device.update(device.id, { is_active: true });
+          
+          device.is_active = true; 
         }
 
         const response = { status: "success", topic: device.topic };
@@ -288,7 +340,6 @@ class MQTTService {
     }
   }
 }
-
 
 const mqttService = new MQTTService();
 export default mqttService;

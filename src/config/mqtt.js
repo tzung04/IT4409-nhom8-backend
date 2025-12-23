@@ -5,7 +5,7 @@ let client = null;
 export const connectMQTT = () => { 
   const options = {
     clean: true,
-    connectTimeout: 4000,
+    connectTimeout: 10000,
     reconnectPeriod: 1000,
   };
 
