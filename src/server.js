@@ -18,7 +18,7 @@ import dataRoutes from './routes/data.routes.js';
 import alertRoutes from './routes/alert.routes.js';
 import historyRoutes from './routes/history.routes.js';
 import placeRoutes from './routes/place.routes.js';
-import rfidRoutes from './routes/rfid.routes.js'
+import accessControlRoutes from './routes/accessControl.routes.js'
 
 dotenv.config();
 const app = express();
@@ -61,7 +61,7 @@ app.use('/api/data', dataRoutes);
 app.use('/api/alert', alertRoutes);
 app.use('/api/history', historyRoutes);
 app.use('/api/places', placeRoutes);
-app.use('/api/access-control', rfidRoutes);
+app.use('/api/access-control', accessControlRoutes);
 
 // 404 handler
 app.use((req, res) => {
