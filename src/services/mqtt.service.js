@@ -71,6 +71,14 @@ class MQTTService {
 
         if (isViolated) {
           // 2. Debounce (5 phút)
+          // BƯỚC 1: LUÔN LUÔN PUBLISH LỆNH ĐIỀU KHIỂN (Để ESP32 luôn phản ứng kịp thời)
+          const alertTopic = `${device.topic}/alert`;
+          this.publish(alertTopic, {
+              metric: rule.metric_type.toLowerCase(),
+              state: "ON"
+          });
+
+          // BƯỚC 2: KIỂM TRA DEBOUNCE CHO CÁC TÁC VỤ NẶNG (Email, DB Log)
           console.log(`[RULE ${rule.id}] Checking for recent alerts...`);
           
           const recentAlert = await AlertLog.findRecentByDeviceAndRule(device.id, rule.id, 5);
@@ -84,7 +92,7 @@ class MQTTService {
             
             // Tính thủ công để debug
             const now = Date.now();
-            const alertTime = new Date(recentAlert.triggered_at).getTime();
+            const alertTime = new Date(recentAlert.triggered_at + "UTC").getTime();
             const diffMs = now - alertTime;
             const diffMinutes = diffMs / 1000 / 60;
             
@@ -114,6 +122,8 @@ class MQTTService {
 
           console.log(`\n🚨 ALERT TRIGGERED: ${message}`);
           console.log(`🚨 Time: ${new Date().toISOString()}\n`);
+
+          
 
           const ruleDisplay = `
           ${rule.metric_type} ${conditionSymbol} ${rule.threshold}
@@ -328,6 +338,7 @@ class MQTTService {
 
       const payload = typeof message === 'string' ? message : JSON.stringify(message);
 
+      console.log(`[MQTT SEND] Topic: ${topic} | Payload: ${payload}`);
       client.publish(topic, payload, { qos: 1 }, (err) => {
         if (err) {
           console.error(`Failed to publish to ${topic}:`, err);
