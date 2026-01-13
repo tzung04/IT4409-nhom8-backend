@@ -18,6 +18,7 @@ import dataRoutes from './routes/data.routes.js';
 import alertRoutes from './routes/alert.routes.js';
 import historyRoutes from './routes/history.routes.js';
 import placeRoutes from './routes/place.routes.js';
+import rfidRoutes from './routes/rfid.routes.js'
 
 dotenv.config();
 const app = express();
@@ -60,6 +61,7 @@ app.use('/api/data', dataRoutes);
 app.use('/api/alert', alertRoutes);
 app.use('/api/history', historyRoutes);
 app.use('/api/places', placeRoutes);
+app.use('/api/access-control', rfidRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -73,6 +75,18 @@ app.use((err, req, res, next) => {
     message: err.message || 'Internal server error'
   });
 });
+
+setInterval(() => {
+  if (global.scanSessions) {
+    const now = Date.now();
+    Object.keys(global.scanSessions).forEach(key => {
+      if (global.scanSessions[key].expires_at < now) {
+        delete global.scanSessions[key];
+        console.log(`Cleaned up expired session: ${key}`);
+      }
+    });
+  }
+}, 60000);
 
 // Start server
 app.listen(PORT, () => {

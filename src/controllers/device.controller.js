@@ -1,4 +1,5 @@
 import Device from '../models/device.model.js'; 
+import AccessControlDevice from '../models/accessControl.model.js';
 import crypto from 'crypto';
 
 
@@ -15,48 +16,49 @@ const validateOwnership = async (deviceId, userId) => {
 
 // Tạo thiết bị mới
 export const createDevice = async (req, res) => {
-    // Thêm place_id vào body nếu frontend có gửi lên
-    const { name, mac_address, place_id } = req.body;
-
-    if (!req.user || !req.user.id) {
-            return res.status(401).json({ message: "Không xác thực được người dùng." });
-        }
-        
+    const { name, mac_address, place_id, device_type } = req.body;
     const userId = req.user.id;
 
-    
-    if (!name || !mac_address) {
-            return res.status(400).json({ message: "Tên và địa chỉ MAC là bắt buộc." });
+    if (!name || !mac_address || !device_type) {
+        return res.status(400).json({ message: "Thiếu thông tin bắt buộc (Tên, MAC, Loại thiết bị)." });
     }
 
-    // Tự động tạo device_serial duy nhất (Thay thế logic device_key cũ)
-    const device_serial = crypto.randomBytes(8).toString('hex').toUpperCase();
-    const topic = `/devices/${mac_address}/${device_serial}/data`;
-
     try {
-        const newDevice = await Device.create({
-            user_id: userId,
-            place_id: place_id || null, // Có thể null
-            mac_address: mac_address.toUpperCase(),
-            device_serial,
-            name,
-            topic,
-            is_active: false
-        });
+        // PHÂN LUỒNG XỬ LÝ DỰA TRÊN DEVICE_TYPE
+        if (device_type === 'access_control') {
+            // Lưu vào bảng access_control_devices
+            const newDevice = await AccessControlDevice.create({
+                user_id: userId,
+                place_id: place_id || null,
+                mac_address,
+                name
+            });
+            return res.status(201).json({ ...newDevice, device_type: 'access_control' });
+        } 
+        
+        else if (device_type === 'sensor') {
+            // Lưu vào bảng devices (Cảm biến) 
+            const device_serial = crypto.randomBytes(8).toString('hex').toUpperCase();
+            const topic = `/devices/${mac_address}/${device_serial}/data`;
 
-        res.status(201).json(newDevice);
+            const newDevice = await Device.create({
+                user_id: userId,
+                place_id: place_id || null,
+                mac_address: mac_address.toUpperCase(),
+                device_serial,
+                name,
+                topic,
+                is_active: false
+            });
+            return res.status(201).json({ ...newDevice, device_type: 'sensor' });
+        } 
+        
+        else {
+            return res.status(400).json({ message: "Loại thiết bị không hợp lệ." });
+        }
+
     } catch (err) {
         console.error('Error creating device:', err);
-
-        if (err.name === 'SequelizeUniqueConstraintError' || err.code === 11000) {
-             return res.status(409).json({ error: 'Serial thiết bị bị trùng, vui lòng thử lại.' });
-        }
-        
-        // Lỗi khóa ngoại (Foreign key) nếu place_id không tồn tại
-        if (err.name === 'SequelizeForeignKeyConstraintError') {
-             return res.status(400).json({ error: 'Khu vực (Place) không hợp lệ.' });
-        }
-        
         res.status(500).json({ error: 'Lỗi máy chủ khi tạo thiết bị.' });
     }
 };

@@ -105,6 +105,46 @@ export async function setupDatabase() {
       );
     `);
 
+    // Bảng thiết bị kiểm soát ra/ vào
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS access_control_devices (
+        id SERIAL PRIMARY KEY,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        place_id INTEGER REFERENCES places(id) ON DELETE SET NULL,
+        mac_address VARCHAR(100) UNIQUE NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Bảng thẻ RFID
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS rfid_cards (
+        id SERIAL PRIMARY KEY,
+        uid VARCHAR(20) UNIQUE NOT NULL,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        card_name VARCHAR(100),
+        is_active BOOLEAN DEFAULT true,
+        expires_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Bảng log truy cập 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS access_logs (
+        id SERIAL PRIMARY KEY,
+        card_uid VARCHAR(20),
+        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        device_id INTEGER REFERENCES access_control_devices(id) ON DELETE SET NULL,
+        image_path VARCHAR(255),
+        status VARCHAR(10), 
+        message TEXT,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     console.log("Creating indexes...");
 
     await client.query(
@@ -121,6 +161,12 @@ export async function setupDatabase() {
     );
     await client.query(
       "CREATE INDEX IF NOT EXISTS idx_alert_logs_triggered ON alert_logs(triggered_at);"
+    );
+    await client.query(
+      "CREATE INDEX IF NOT EXISTS idx_rfid_cards_user ON rfid_cards(user_id);"
+    );
+    await client.query(
+      "CREATE INDEX IF NOT EXISTS idx_rfid_cards_active ON rfid_cards(is_active);"
     );
 
     await client.query("COMMIT");
